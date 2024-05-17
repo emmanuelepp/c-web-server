@@ -66,20 +66,43 @@ void serve_forever(HTTPServer *server) {
 
         char buffer[1024];
         memset(buffer, 0, sizeof(buffer));
-        int recv_size = recv(client_sock, buffer, sizeof(buffer)-1,0);
+        int recv_size = recv(client_sock, buffer, sizeof(buffer) - 1, 0);
 
-        if(recv_size == SOCKET_ERROR) {
+        if (recv_size == SOCKET_ERROR) {
             printf("recv failed with error: %d\n", WSAGetLastError());
             closesocket(client_sock);
             continue;
         }
 
+        buffer[recv_size] = '\0'; 
         printf("Request: %s\n", buffer);
 
-        char *response = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n<html><body><h1>Hello, World!</h1></body></html>";
-        send(client_sock, response, strlen(response), 0);
+        if (strstr(buffer, "GET / ") || strstr(buffer, "GET /index.html")) {
+
+            FILE *file = fopen("resources/index.html", "rb");
+            if (file) {
+                fseek(file, 0, SEEK_END);
+                long fileSize = ftell(file);
+                fseek(file, 0, SEEK_SET);
+                char *htmlContent = (char *)malloc(fileSize);
+                if (htmlContent) {
+                    fread(htmlContent, fileSize, 1, file);
+                    char header[256];
+                    snprintf(header, sizeof(header), "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: %ld\r\n\r\n", fileSize);
+                    send(client_sock, header, strlen(header), 0);
+                    send(client_sock, htmlContent, fileSize, 0);
+                    free(htmlContent);
+                }
+                fclose(file);
+            } else {
+                const char *errorResponse = "HTTP/1.1 404 Not Found\r\nContent-Type: text/plain\r\n\r\nFile not found.";
+                send(client_sock, errorResponse, strlen(errorResponse), 0);
+            }
+        } else {
+            const char *errorResponse = "HTTP/1.1 404 Not Found\r\nContent-Type: text/plain\r\n\r\nFile not found.";
+            send(client_sock, errorResponse, strlen(errorResponse), 0);
+        }
 
         closesocket(client_sock);
-
     }
 }
